@@ -4,6 +4,9 @@ Generates manpages for NixOS modules.
 
 Given a flake, `modman` evaluates one of its `nixosModules` and renders the options that module declares as a manpage.
 
+> [!CAUTION]
+> modman is vibe-coded.
+
 ## Usage
 
 ```
