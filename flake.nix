@@ -78,6 +78,34 @@
       checks = forAllSystems (pkgs: {
         # Building the package runs shellcheck in its checkPhase.
         modman = self.packages.${pkgs.stdenv.hostPlatform.system}.modman;
+
+        # CLI tests against a stub `nix` (no network, no daemon).
+        cli =
+          pkgs.runCommand "modman-cli-tests"
+            {
+              src = lib.fileset.toSource {
+                root = ./.;
+                fileset = lib.fileset.unions [
+                  ./modman
+                  ./modman.nix
+                  ./tests
+                ];
+              };
+              nativeBuildInputs = [
+                pkgs.bats
+                pkgs.jq
+                pkgs.coreutils
+              ];
+            }
+            ''
+              cp -r "$src" src
+              chmod -R u+w src
+              cd src
+              # No /usr/bin/env in the sandbox; run the real scripts, not via `bash`.
+              patchShebangs modman tests/nix-stub
+              MODMAN=$PWD/modman bats tests/cli.bats
+              touch $out
+            '';
       });
 
       devShells = forAllSystems (pkgs: {
@@ -85,6 +113,8 @@
           packages = [
             pkgs.shellcheck
             pkgs.nixfmt
+            pkgs.bats
+            pkgs.jq
           ];
         };
       });

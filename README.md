@@ -65,3 +65,24 @@ Pages are cached per locked revision, module, nixpkgs, system and
 `/tmp/modman-$UID`). The links are GC roots only until that directory is
 cleared (logout/reboot). Branch refs are re-resolved at most every
 `tarball-ttl` (1h by default); use `--refresh` to force it.
+
+## Development
+
+```
+nix develop          # shellcheck, nixfmt, bats, jq
+nix flake check      # shellcheck + CLI tests
+```
+
+The CLI tests (`tests/cli.bats`) run `modman` against a stub `nix`
+(`tests/nix-stub`), so they need neither network nor a nix daemon:
+
+```
+nix develop -c bats tests/cli.bats
+```
+
+Running `./modman` from a checkout needs `MODMAN_NIXPKGS` set to a nixpkgs
+source path (the packaged wrapper sets it):
+
+```
+MODMAN_NIXPKGS=$(nix flake archive --json | jq -r .inputs.nixpkgs.path) ./modman Mic92/niks3
+```

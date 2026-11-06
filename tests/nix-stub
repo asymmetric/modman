@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Stub `nix` for tests/cli.bats. Logs each invocation (one line, "$*") to
+# $STUB_LOG; `build` writes $STUB_PAGE and links it at --out-link.
+set -euo pipefail
+
+printf '%s\n' "$*" >>"$STUB_LOG"
+
+case ${1:-} in
+flake)
+  if [[ ${2:-} == metadata && ${3:-} == --json ]]; then
+    # Last argument is the ref; mark it so tests can tell locked from display ref.
+    printf '{"url":"%s?locked=1"}\n' "${!#}"
+    exit 0
+  fi
+  ;;
+config)
+  if [[ ${2:-} == show && ${3:-} == system ]]; then
+    echo x86_64-linux
+    exit 0
+  fi
+  ;;
+build)
+  link=
+  while [[ $# -gt 0 ]]; do
+    if [[ $1 == --out-link ]]; then
+      link=${2:?}
+      break
+    fi
+    shift
+  done
+  if [[ -n $link ]]; then
+    printf '%s\n' '.TH "MODMAN" "5" "01/01/1980" "fake" "NixOS Module Options"' >"$STUB_PAGE"
+    ln -sf "$STUB_PAGE" "$link"
+    echo BUILD >>"$STUB_LOG"
+    exit 0
+  fi
+  ;;
+esac
+
+echo "nix-stub: unexpected invocation: nix $*" >&2
+exit 1
