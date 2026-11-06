@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# modman: show the NixOS module options of a flake as a manpage.
+set -euo pipefail
+
+usage() {
+  echo "usage: ${0##*/} FLAKEREF" >&2
+  exit 2
+}
+
+# Leading dash would be parsed as an option by nix.
+[[ $# -eq 1 && $1 != -* ]] || usage
+
+flake=$1
+here=$(dirname "$(readlink -f "$0")")
+modman_nix=${MODMAN_NIX:-$here/modman.nix}
+
+if [[ -z ${MODMAN_NIXPKGS:-} ]]; then
+  echo "${0##*/}: MODMAN_NIXPKGS not set (run via \`nix run\`, or set it to a nixpkgs source path)" >&2
+  exit 2
+fi
+system=${MODMAN_SYSTEM:-$(nix config show system)}
+
+# --argstr nixpkgs, not --arg: a path literal would be copied into the store again.
+# --impure: builtins.getFlake on the target ref, which is not locked.
+page=$(nix build --impure --no-link --print-out-paths \
+  -f "$modman_nix" \
+  --argstr flake "$flake" \
+  --argstr nixpkgs "$MODMAN_NIXPKGS" \
+  --argstr system "$system")
+
+if [[ -t 1 ]]; then
+  exec man -l "$page"
+else
+  cat "$page"
+fi
