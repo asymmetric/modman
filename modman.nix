@@ -37,7 +37,14 @@ let
     modules = [
       { nixpkgs.hostPlatform = system; }
       { system.stateVersion = "26.11"; }
-      selected
+      # A module given as a value (e.g. `import ./m.nix { inherit self; }`)
+      # has no file of its own, so its declarations would be attributed to
+      # this file and filtered out. _file places them inside the flake source.
+      # Path modules keep their own file names.
+      {
+        _file = "${src.outPath}/flake.nix#nixosModules.${module}";
+        imports = [ selected ];
+      }
     ];
   };
   inherit (eval) pkgs;
