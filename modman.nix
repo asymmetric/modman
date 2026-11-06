@@ -1,4 +1,4 @@
-# Render the options declared by a flake's `nixosModules.default` as a manpage.
+# Render the options declared by a flake's `nixosModules.<module>` as a manpage.
 #
 # Usage:
 #   nix build --impure -f modman.nix --argstr flake github:owner/repo \
@@ -9,14 +9,25 @@
 # (modman passes the flake ref as the user typed it).
 # nixpkgs: source path of the nixpkgs used to evaluate the module and render
 # the page (modman's own pin; the target flake's inputs are not used).
+# module: attribute of the flake's `nixosModules` to render.
 {
   flake,
   name ? flake,
+  module ? "default",
   nixpkgs,
   system,
 }:
 let
   src = builtins.getFlake flake;
+
+  available = lib.concatStringsSep ", " (lib.attrNames src.nixosModules);
+  selected =
+    if !(src ? nixosModules) then
+      throw "modman: ${name} has no nixosModules output"
+    else if !(src.nixosModules ? ${module}) then
+      throw "modman: ${name} has no nixosModules.${module}; available: ${available}"
+    else
+      src.nixosModules.${module};
 
   lib = import "${nixpkgs}/lib";
 
@@ -26,7 +37,7 @@ let
     modules = [
       { nixpkgs.hostPlatform = system; }
       { system.stateVersion = "26.11"; }
-      src.nixosModules.default
+      selected
     ];
   };
   inherit (eval) pkgs;
@@ -62,7 +73,7 @@ let
     .ad l
     .cflags 4 /
     .SH "NAME"
-    ${name} \- NixOS options declared by nixosModules.default
+    ${name} \- NixOS options declared by nixosModules.${module}
     .SH "OPTIONS"
   '';
   footer = builtins.toFile "footer.roff" "";
