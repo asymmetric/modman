@@ -2,8 +2,7 @@
 
 Generates manpages for NixOS modules.
 
-Given a flake, `modman` evaluates one of its `nixosModules` and renders the
-options that module declares (and only those) as a manpage.
+Given a flake, `modman` evaluates one of its `nixosModules` and renders the options that module declares as a manpage.
 
 ## Usage
 
@@ -13,7 +12,8 @@ modman FLAKEREF [-m|--module NAME] [--refresh]
 
 ```
 modman Mic92/niks3
-modman github:nlewo/comin -m comin
+modman nlewo/comin -m comin
+modman https://codeberg.org/DAWO/DAWO-Sextant
 ```
 
 Options may appear before or after `FLAKEREF`.
@@ -73,8 +73,9 @@ nix develop          # shellcheck, nixfmt, bats, jq
 nix flake check      # shellcheck + CLI tests
 ```
 
-The CLI tests (`tests/cli.bats`) run `modman` against a stub `nix`
-(`tests/nix-stub`), so they need neither network nor a nix daemon:
+The CLI tests (`tests/cli.bats`) source `modman` and test its functions
+(ref normalization, argument parsing, cache key) directly, so they need
+neither network nor a nix daemon:
 
 ```
 nix develop -c bats tests/cli.bats

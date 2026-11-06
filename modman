@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # modman: show the NixOS module options of a flake as a manpage.
-set -euo pipefail
+#
+# Sourceable: `main` only runs when executed, so tests can call the functions.
 
 prog=${0##*/}
 
@@ -14,67 +15,67 @@ die() {
   exit 1
 }
 
-refresh=
-module=default
-args=()
+# Parse the command line into the globals refresh, module and ref.
 # Options may appear before or after FLAKEREF; `--` ends option parsing.
-while [[ $# -gt 0 ]]; do
-  case $1 in
-  --refresh)
-    refresh=1
-    shift
-    ;;
-  -m | --module)
-    [[ $# -ge 2 ]] || usage
-    module=$2
-    shift 2
-    ;;
-  --module=*)
-    module=${1#--module=}
-    shift
-    ;;
-  --)
-    shift
-    args+=("$@")
-    break
-    ;;
-  -*) usage ;;
-  *)
-    args+=("$1")
-    shift
-    ;;
-  esac
-done
-[[ -n $module ]] || usage
+parse_args() {
+  refresh=
+  module=default
+  ref=
+  local args=()
+  while [[ $# -gt 0 ]]; do
+    case $1 in
+    --refresh)
+      refresh=1
+      shift
+      ;;
+    -m | --module)
+      [[ $# -ge 2 ]] || usage
+      module=$2
+      shift 2
+      ;;
+    --module=*)
+      module=${1#--module=}
+      shift
+      ;;
+    --)
+      shift
+      args+=("$@")
+      break
+      ;;
+    -*) usage ;;
+    *)
+      args+=("$1")
+      shift
+      ;;
+    esac
+  done
+  [[ -n $module ]] || usage
 
-# Leading dash would be parsed as an option by nix.
-[[ ${#args[@]} -eq 1 && ${args[0]} != -* ]] || usage
-name=${args[0]}
+  # Leading dash would be parsed as an option by nix.
+  [[ ${#args[@]} -eq 1 && ${args[0]} != -* ]] || usage
+  ref=${args[0]}
+}
 
-# Normalize into a flake ref:
+# Print REF normalized into a flake ref:
 #   https://host/o/r, host.tld/o/r  -> git+https://host/o/r?shallow=1
 #   owner/repo                      -> github:owner/repo
 # Other flake refs (github:, path:, ...) and local paths pass through.
 # shallow=1: fetch only the target commit, not the full history and tags.
-case $name in
-http://* | https://*) name="git+https://${name#*://}?shallow=1" ;;
-*:* | .* | /* | ~*) ;;
-*/*)
-  if [[ ${name%%/*} == *.* ]]; then
-    name="git+https://$name?shallow=1"
-  else
-    name=github:$name
-  fi
-  ;;
-esac
-here=$(dirname "$(readlink -f "$0")")
-modman_nix=${MODMAN_NIX:-$here/modman.nix}
-
-if [[ -z ${MODMAN_NIXPKGS:-} ]]; then
-  echo "$prog: MODMAN_NIXPKGS not set (run via \`nix run\`, or set it to a nixpkgs source path)" >&2
-  exit 2
-fi
-system=${MODMAN_SYSTEM:-$(nix config show system)}
+normalize() {
+  local name=$1
+  case $name in
+  http://* | https://*) name="git+https://${name#*://}?shallow=1" ;;
+  *:* | .* | /* | ~*) ;;
+  */*)
+    if [[ ${name%%/*} == *.* ]]; then
+      name="git+https://$name?shallow=1"
+    else
+      name=github:$name
+    fi
+    ;;
+  esac
+  printf '%s\n' "$name"
+}
 
 # sha256 of stdin, hex digest only.
 sha256() {
@@ -83,6 +84,11 @@ sha256() {
   else
     shasum -a 256
   fi | cut -d' ' -f1
+}
+
+# Print the cache key for FLAKE (locked) MODULE NIXPKGS SYSTEM MODMAN_NIX_PATH.
+cache_key() {
+  printf '%s\n' "$1" "$2" "$3" "$4" "$(sha256 <"$5")" | sha256
 }
 
 # Octal permission bits of a file (GNU stat, then BSD stat).
@@ -117,29 +123,48 @@ show() {
   fi
 }
 
-# Resolve the target to a locked ref (rev + narHash).
-metadata=$(nix flake metadata --json ${refresh:+--refresh} "$name")
-flake=$(jq -er .url <<<"$metadata")
+main() {
+  # Here rather than at the top, so sourcing doesn't change the caller's shell.
+  set -euo pipefail
 
-key=$(
-  printf '%s\n' "$flake" "$module" "$MODMAN_NIXPKGS" "$system" "$(sha256 <"$modman_nix")" | sha256
-)
-dir=$(cache_dir)
-cached=$dir/$key.5
+  parse_args "$@"
+  local name here modman_nix system metadata flake key dir cached
+  name=$(normalize "$ref")
+  here=$(dirname "$(readlink -f "$0")")
+  modman_nix=${MODMAN_NIX:-$here/modman.nix}
 
-if [[ -n $refresh || ! -e $cached ]]; then
-  # The out-link is an indirect GC root; once the cache dir is cleared (logout,
-  # reboot), the root dangles and the page becomes collectable again.
-  # --argstr nixpkgs, not --arg: a path literal would be copied into the store again.
-  # --impure: still needed because nixpkgs is passed as a plain string, which pure
-  # evaluation refuses to import (the target ref itself is locked).
-  nix build --impure --out-link "$cached" \
-    -f "$modman_nix" \
-    --argstr flake "$flake" \
-    --argstr name "$name" \
-    --argstr module "$module" \
-    --argstr nixpkgs "$MODMAN_NIXPKGS" \
-    --argstr system "$system"
+  if [[ -z ${MODMAN_NIXPKGS:-} ]]; then
+    echo "$prog: MODMAN_NIXPKGS not set (run via \`nix run\`, or set it to a nixpkgs source path)" >&2
+    exit 2
+  fi
+  system=${MODMAN_SYSTEM:-$(nix config show system)}
+
+  # Resolve the target to a locked ref (rev + narHash).
+  metadata=$(nix flake metadata --json ${refresh:+--refresh} "$name")
+  flake=$(jq -er .url <<<"$metadata")
+
+  key=$(cache_key "$flake" "$module" "$MODMAN_NIXPKGS" "$system" "$modman_nix")
+  dir=$(cache_dir)
+  cached=$dir/$key.5
+
+  if [[ -n $refresh || ! -e $cached ]]; then
+    # The out-link is an indirect GC root; once the cache dir is cleared (logout,
+    # reboot), the root dangles and the page becomes collectable again.
+    # --argstr nixpkgs, not --arg: a path literal would be copied into the store again.
+    # --impure: still needed because nixpkgs is passed as a plain string, which pure
+    # evaluation refuses to import (the target ref itself is locked).
+    nix build --impure --out-link "$cached" \
+      -f "$modman_nix" \
+      --argstr flake "$flake" \
+      --argstr name "$name" \
+      --argstr module "$module" \
+      --argstr nixpkgs "$MODMAN_NIXPKGS" \
+      --argstr system "$system"
+  fi
+
+  show "$cached"
+}
+
+if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
+  main "$@"
 fi
-
-show "$cached"

@@ -79,7 +79,7 @@
         # Building the package runs shellcheck in its checkPhase.
         modman = self.packages.${pkgs.stdenv.hostPlatform.system}.modman;
 
-        # CLI tests against a stub `nix` (no network, no daemon).
+        # CLI tests: source modman and test its functions (no nix calls).
         cli =
           pkgs.runCommand "modman-cli-tests"
             {
@@ -87,13 +87,11 @@
                 root = ./.;
                 fileset = lib.fileset.unions [
                   ./modman
-                  ./modman.nix
-                  ./tests
+                  ./tests/cli.bats
                 ];
               };
               nativeBuildInputs = [
                 pkgs.bats
-                pkgs.jq
                 pkgs.coreutils
               ];
             }
@@ -101,8 +99,8 @@
               cp -r "$src" src
               chmod -R u+w src
               cd src
-              # No /usr/bin/env in the sandbox; run the real scripts, not via `bash`.
-              patchShebangs modman tests/nix-stub
+              # No /usr/bin/env in the sandbox; one test executes the script.
+              patchShebangs modman
               MODMAN=$PWD/modman bats tests/cli.bats
               touch $out
             '';
