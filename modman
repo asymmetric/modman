@@ -86,9 +86,10 @@ sha256() {
   fi | cut -d' ' -f1
 }
 
-# Print the cache key for FLAKE (locked) MODULE NIXPKGS SYSTEM MODMAN_NIX_PATH.
+# Print the cache key for FLAKE (locked) MODULE NIXPKGS SYSTEM FILE...
+# (FILE...: the Nix sources that render the page, modman.nix and lib.nix).
 cache_key() {
-  printf '%s\n' "$1" "$2" "$3" "$4" "$(sha256 <"$5")" | sha256
+  printf '%s\n' "$1" "$2" "$3" "$4" "$(cat "${@:5}" | sha256)" | sha256
 }
 
 # Octal permission bits of a file (GNU stat, then BSD stat).
@@ -143,7 +144,8 @@ main() {
   metadata=$(nix flake metadata --json ${refresh:+--refresh} "$name")
   flake=$(jq -er .url <<<"$metadata")
 
-  key=$(cache_key "$flake" "$module" "$MODMAN_NIXPKGS" "$system" "$modman_nix")
+  key=$(cache_key "$flake" "$module" "$MODMAN_NIXPKGS" "$system" \
+    "$modman_nix" "$(dirname "$modman_nix")/lib.nix")
   dir=$(cache_dir)
   cached=$dir/$key.5
 

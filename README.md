@@ -60,7 +60,7 @@ or add `packages.<system>.default` from this flake to your profile/config.
 ## Cache
 
 Pages are cached per locked revision, module, nixpkgs, system and
-`modman.nix` version, as `nix build --out-link` symlinks in
+`modman.nix`/`lib.nix` contents, as `nix build --out-link` symlinks in
 `$XDG_RUNTIME_DIR/modman` (falling back to `$TMPDIR/modman`, then
 `/tmp/modman-$UID`). The links are GC roots only until that directory is
 cleared (logout/reboot). Branch refs are re-resolved at most every
@@ -70,7 +70,7 @@ cleared (logout/reboot). Branch refs are re-resolved at most every
 
 ```
 nix develop          # shellcheck, nixfmt, bats, jq
-nix flake check      # shellcheck + CLI tests
+nix flake check      # shellcheck + CLI tests + Nix tests
 ```
 
 The CLI tests (`tests/cli.bats`) source `modman` and test its functions
@@ -80,6 +80,11 @@ neither network nor a nix daemon:
 ```
 nix develop -c bats tests/cli.bats
 ```
+
+The Nix tests (`checks.<system>.nix`) render pages for the fixture flakes in
+`tests/fixtures/` through `lib.nix` (the core of `modman.nix`, minus
+`getFlake`) and grep them: option filtering, declarations, module selection,
+value modules, unknown-module errors.
 
 Running `./modman` from a checkout needs `MODMAN_NIXPKGS` set to a nixpkgs
 source path (the packaged wrapper sets it):

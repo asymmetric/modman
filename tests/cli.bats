@@ -93,15 +93,19 @@ assert_usage() {
   [[ $status -eq 2 && $output == *MODMAN_NIXPKGS* ]]
 }
 
-@test "cache_key: depends on flake, module, nixpkgs, system, modman.nix contents" {
-  local f=$BATS_TEST_TMPDIR/modman.nix base
+@test "cache_key: depends on flake, module, nixpkgs, system, Nix file contents" {
+  local f=$BATS_TEST_TMPDIR/modman.nix g=$BATS_TEST_TMPDIR/lib.nix base
   echo a >"$f"
-  base=$(cache_key flake mod np sys "$f")
-  [[ $(cache_key flake mod np sys "$f") == "$base" ]]
-  [[ $(cache_key flake2 mod np sys "$f") != "$base" ]]
-  [[ $(cache_key flake mod2 np sys "$f") != "$base" ]]
-  [[ $(cache_key flake mod np2 sys "$f") != "$base" ]]
-  [[ $(cache_key flake mod np sys2 "$f") != "$base" ]]
+  echo a >"$g"
+  base=$(cache_key flake mod np sys "$f" "$g")
+  [[ $(cache_key flake mod np sys "$f" "$g") == "$base" ]]
+  [[ $(cache_key flake2 mod np sys "$f" "$g") != "$base" ]]
+  [[ $(cache_key flake mod2 np sys "$f" "$g") != "$base" ]]
+  [[ $(cache_key flake mod np2 sys "$f" "$g") != "$base" ]]
+  [[ $(cache_key flake mod np sys2 "$f" "$g") != "$base" ]]
   echo b >"$f"
-  [[ $(cache_key flake mod np sys "$f") != "$base" ]]
+  [[ $(cache_key flake mod np sys "$f" "$g") != "$base" ]]
+  echo a >"$f"
+  echo b >"$g"
+  [[ $(cache_key flake mod np sys "$f" "$g") != "$base" ]]
 }
