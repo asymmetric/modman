@@ -50,6 +50,7 @@
               --set MODMAN_SYSTEM ${pkgs.stdenv.hostPlatform.system} \
               --suffix PATH : ${
                 lib.makeBinPath [
+                  pkgs.jq
                   pkgs.man
                   pkgs.nix
                 ]

@@ -4,10 +4,14 @@
 #   nix build --impure -f modman.nix --argstr flake github:owner/repo \
 #     --argstr nixpkgs /nix/store/...-source --argstr system x86_64-linux
 #
+# flake: ref that is fetched (modman passes the locked URL).
+# name: ref shown in the page header and declarations; defaults to flake
+# (modman passes the flake ref as the user typed it).
 # nixpkgs: source path of the nixpkgs used to evaluate the module and render
 # the page (modman's own pin; the target flake's inputs are not used).
 {
   flake,
+  name ? flake,
   nixpkgs,
   system,
 }:
@@ -47,18 +51,18 @@ let
       // lib.optionalAttrs own {
         # Attrset form, so nixos-render-docs doesn't label them <nixpkgs/...>.
         declarations = map (
-          d: if isOwn d then { name = "<${flake}/${lib.removePrefix prefix (toString d)}>"; } else d
+          d: if isOwn d then { name = "<${name}/${lib.removePrefix prefix (toString d)}>"; } else d
         ) opt.declarations;
       };
   };
 
   header = builtins.toFile "header.roff" ''
-    .TH "MODMAN" "5" "01/01/1980" "${flake}" "NixOS Module Options"
+    .TH "MODMAN" "5" "01/01/1980" "${name}" "NixOS Module Options"
     .nh
     .ad l
     .cflags 4 /
     .SH "NAME"
-    ${flake} \- NixOS options declared by nixosModules.default
+    ${name} \- NixOS options declared by nixosModules.default
     .SH "OPTIONS"
   '';
   footer = builtins.toFile "footer.roff" "";

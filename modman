@@ -2,34 +2,102 @@
 # modman: show the NixOS module options of a flake as a manpage.
 set -euo pipefail
 
+prog=${0##*/}
+
 usage() {
-  echo "usage: ${0##*/} FLAKEREF" >&2
+  echo "usage: $prog [--refresh] FLAKEREF" >&2
   exit 2
 }
+
+die() {
+  echo "$prog: $*" >&2
+  exit 1
+}
+
+refresh=
+case ${1:-} in
+--refresh)
+  refresh=1
+  shift
+  ;;
+esac
 
 # Leading dash would be parsed as an option by nix.
 [[ $# -eq 1 && $1 != -* ]] || usage
 
-flake=$1
+name=$1
 here=$(dirname "$(readlink -f "$0")")
 modman_nix=${MODMAN_NIX:-$here/modman.nix}
 
 if [[ -z ${MODMAN_NIXPKGS:-} ]]; then
-  echo "${0##*/}: MODMAN_NIXPKGS not set (run via \`nix run\`, or set it to a nixpkgs source path)" >&2
+  echo "$prog: MODMAN_NIXPKGS not set (run via \`nix run\`, or set it to a nixpkgs source path)" >&2
   exit 2
 fi
 system=${MODMAN_SYSTEM:-$(nix config show system)}
 
-# --argstr nixpkgs, not --arg: a path literal would be copied into the store again.
-# --impure: builtins.getFlake on the target ref, which is not locked.
-page=$(nix build --impure --no-link --print-out-paths \
-  -f "$modman_nix" \
-  --argstr flake "$flake" \
-  --argstr nixpkgs "$MODMAN_NIXPKGS" \
-  --argstr system "$system")
+# sha256 of stdin, hex digest only.
+sha256() {
+  if command -v sha256sum >/dev/null; then
+    sha256sum
+  else
+    shasum -a 256
+  fi | cut -d' ' -f1
+}
 
-if [[ -t 1 ]]; then
-  exec man -l "$page"
-else
-  cat "$page"
+# Octal permission bits of a file (GNU stat, then BSD stat).
+mode() {
+  stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"
+}
+
+cache_dir() {
+  local base=${XDG_RUNTIME_DIR:-${TMPDIR:-}} dir
+  if [[ -n $base ]]; then
+    dir=$base/modman
+    # -m applies to $dir only; $base is the user's own runtime/tmp dir.
+    # shellcheck disable=SC2174
+    mkdir -p -m 700 "$dir"
+  else
+    # Shared /tmp: never follow or reuse a directory we don't exclusively own.
+    dir=/tmp/modman-$(id -u)
+    mkdir -m 700 "$dir" 2>/dev/null || true
+    [[ ! -L $dir ]] || die "$dir: is a symlink, refusing to use it"
+    [[ -d $dir ]] || die "$dir: not a directory"
+    [[ -O $dir ]] || die "$dir: not owned by the current user, refusing to use it"
+    [[ $(mode "$dir") == 700 ]] || die "$dir: mode is not 700, refusing to use it"
+  fi
+  printf '%s\n' "$dir"
+}
+
+show() {
+  if [[ -t 1 ]]; then
+    exec man -l "$1"
+  else
+    cat "$1"
+  fi
+}
+
+# Resolve the target to a locked ref (rev + narHash).
+metadata=$(nix flake metadata --json ${refresh:+--refresh} "$name")
+flake=$(jq -er .url <<<"$metadata")
+
+key=$(
+  printf '%s\n' "$flake" "$MODMAN_NIXPKGS" "$system" "$(sha256 <"$modman_nix")" | sha256
+)
+dir=$(cache_dir)
+cached=$dir/$key.5
+
+if [[ -n $refresh || ! -e $cached ]]; then
+  # The out-link is an indirect GC root; once the cache dir is cleared (logout,
+  # reboot), the root dangles and the page becomes collectable again.
+  # --argstr nixpkgs, not --arg: a path literal would be copied into the store again.
+  # --impure: still needed because nixpkgs is passed as a plain string, which pure
+  # evaluation refuses to import (the target ref itself is locked).
+  nix build --impure --out-link "$cached" \
+    -f "$modman_nix" \
+    --argstr flake "$flake" \
+    --argstr name "$name" \
+    --argstr nixpkgs "$MODMAN_NIXPKGS" \
+    --argstr system "$system"
 fi
+
+show "$cached"
