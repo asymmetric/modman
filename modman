@@ -49,9 +49,24 @@ done
 
 # Leading dash would be parsed as an option by nix.
 [[ ${#args[@]} -eq 1 && ${args[0]} != -* ]] || usage
-set -- "${args[0]}"
+name=${args[0]}
 
-name=$1
+# Normalize into a flake ref:
+#   https://host/o/r, host.tld/o/r  -> git+https://host/o/r?shallow=1
+#   owner/repo                      -> github:owner/repo
+# Other flake refs (github:, path:, ...) and local paths pass through.
+# shallow=1: fetch only the target commit, not the full history and tags.
+case $name in
+http://* | https://*) name="git+https://${name#*://}?shallow=1" ;;
+*:* | .* | /* | ~*) ;;
+*/*)
+  if [[ ${name%%/*} == *.* ]]; then
+    name="git+https://$name?shallow=1"
+  else
+    name=github:$name
+  fi
+  ;;
+esac
 here=$(dirname "$(readlink -f "$0")")
 modman_nix=${MODMAN_NIX:-$here/modman.nix}
 
