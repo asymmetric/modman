@@ -161,11 +161,12 @@
                 ! grep -qF -- "$2" plain || { echo "$1: unexpected: $2" >&2; exit 1; }
               }
 
-              # Path module: own options only, declarations relative to the name.
+              # Path module: own options only, declarations as store paths.
               has $pathModule services.fixture.enable
               has $pathModule services.fixture.port
               has $pathModule services.fixture.package
-              has $pathModule '<fixture:path-module/module.nix>'
+              has $pathModule '/nix/store/'
+              has $pathModule '-path-module/module.nix'
               has $pathModule 'fixture:path-module - NixOS options declared by nixosModules.default'
               lacks $pathModule services.nginx.enable
               lacks $pathModule boot.loader
@@ -173,7 +174,7 @@
               # Value module: options kept via the _file wrapper.
               has $valueModule services.valuefix.enable
               has $valueModule services.valuefix.foo
-              has $valueModule '<fixture:value-module/flake.nix#nixosModules.default>'
+              has $valueModule '-value-module/flake.nix'
               lacks $valueModule boot.loader
 
               # Module selection.

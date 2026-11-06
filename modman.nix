@@ -5,7 +5,7 @@
 #     --argstr nixpkgs /nix/store/...-source --argstr system x86_64-linux
 #
 # flake: ref that is fetched (modman passes the locked URL).
-# name: ref shown in the page header and declarations; defaults to flake
+# name: ref shown in the page header; defaults to flake
 # (modman passes the flake ref as the user typed it).
 # nixpkgs: source path of the nixpkgs used to evaluate the module and render
 # the page (modman's own pin; the target flake's inputs are not used).

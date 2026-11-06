@@ -4,7 +4,7 @@
 {
   # src: a loaded flake (attrset with `outPath` and optionally `nixosModules`).
   #   Only options declared under `src.outPath` are kept.
-  # name: ref shown in the page header and declarations.
+  # name: ref shown in the page header.
   # module: attribute of `src.nixosModules` to render.
   # nixpkgs: source path of the nixpkgs used to evaluate the module and render
   #   the page.
@@ -36,10 +36,11 @@
           { system.stateVersion = "26.11"; }
           # A module given as a value (e.g. `import ./m.nix { inherit self; }`)
           # has no file of its own, so its declarations would be attributed to
-          # this file and filtered out. _file places them inside the flake source.
-          # Path modules keep their own file names.
+          # this file and filtered out. _file places them inside the flake source
+          # (at flake.nix, where the value is defined). Path modules keep their
+          # own file names.
           {
-            _file = "${src.outPath}/flake.nix#nixosModules.${module}";
+            _file = "${src.outPath}/flake.nix";
             imports = [ selected ];
           }
         ];
@@ -52,23 +53,9 @@
       optionsDoc = pkgs.nixosOptionsDoc {
         inherit (eval) options;
         warningsAreErrors = false;
-        # Hide every option not declared inside the flake source; show
-        # declarations relative to the flake ref.
-        transformOptions =
-          opt:
-          let
-            own = lib.any isOwn opt.declarations;
-          in
-          opt
-          // {
-            visible = opt.visible && own;
-          }
-          // lib.optionalAttrs own {
-            # Attrset form, so nixos-render-docs doesn't label them <nixpkgs/...>.
-            declarations = map (
-              d: if isOwn d then { name = "<${name}/${lib.removePrefix prefix (toString d)}>"; } else d
-            ) opt.declarations;
-          };
+        # Hide every option not declared inside the flake source. Declarations
+        # stay as store paths, which can be opened locally.
+        transformOptions = opt: opt // { visible = opt.visible && lib.any isOwn opt.declarations; };
       };
 
       header = builtins.toFile "header.roff" ''
